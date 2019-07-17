@@ -88,6 +88,7 @@ class Config implements \ArrayAccess, \JsonSerializable
             'export-classes' => false,
         ],
         'namespace' => '',
+        'namespace-paths' => [],
         'name' => '',
         'description' => '',
         'author' => '',

@@ -23,6 +23,14 @@ use Zephir\BaseBackend;
 use Zephir\Compiler;
 use Zephir\Config;
 
+use function preg_replace;
+use function is_dir;
+use function mkdir;
+use function extension_loaded;
+use function str_replace;
+use function trim;
+use function strtolower;
+
 /**
  * Zephir\Console\Command\InitCommand.
  *
@@ -56,22 +64,21 @@ final class InitCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $namespace = $this->sanitizeNamespace($input->getArgument('namespace'));
+        $namespacePath = $this->checkNamespacePath($input->getArgument('namespace-path'));
+        if (empty($namespacePath)) {
+            $namespacePath = $this->checkNamespacePath($namespacePath);
+        }
 
         // Tell the user the name could be reserved by another extension
-        if (\extension_loaded($namespace)) {
+        if (extension_loaded($namespace)) {
             $this->logger->error('This extension can have conflicts with an existing loaded extension');
         }
 
-        $this->config->set('namespace', $namespace);
-        $this->config->set('name', $namespace);
+        $this->config->set('namespace-paths', [$namespace => $namespacePath]);
+        $this->config->set('name', strtolower(str_replace('\\', '_', trim($namespace, '\\'))));
 
-        if (!is_dir($namespace)) {
-            mkdir($namespace, 0755);
-        }
-
-        chdir($namespace);
-        if (!is_dir($namespace)) {
-            mkdir($namespace, 0755);
+        if (!is_dir($namespacePath)) {
+            mkdir($namespacePath, 0755, true);
         }
 
         // Create 'kernel'
@@ -101,6 +108,11 @@ final class InitCommand extends Command
                     'Used backend to create extension',
                     'ZendEngine3'
                 ),
+                new InputArgument(
+                    'namespace-path',
+                    InputArgument::OPTIONAL,
+                    'The extension namespace path'
+                ),
             ]
         );
     }
@@ -112,14 +124,38 @@ final class InitCommand extends Command
             throw new RuntimeException('Not enough arguments (missing: "namespace").');
         }
 
-        $namespace = strtolower(preg_replace('/[^0-9a-zA-Z]/', '', $namespace));
+        $namespace = preg_replace('/[^0-9a-zA-Z]+\\\\/', '', $namespace);
 
         // If sanitizing returns an empty string
         if (empty($namespace)) {
             throw new RuntimeException('Cannot obtain a valid initial namespace for the project.');
         }
+        $namespace = trim(str_replace('\/', '\\', $namespace), '\\');
+        return $namespace . '\\';
+    }
 
-        return $namespace;
+    /**
+     * Check valid namespace path
+     *
+     * @param string|null $path
+     *
+     * @return string|void|
+     */
+    private function checkNamespacePath($path)
+    {
+        if (empty($path) || !is_string($path)) {
+            // use default namespace logic if invalid
+            return;
+        }
+        $path = preg_replace('/^\/([A-z0-9-_+]+\/)/', '', $path);
+        // If sanitizing returns an empty string
+        if (empty($path)) {
+            throw new RuntimeException('Cannot obtain a valid initial namespace path for the project.');
+        }
+        if (strpos($path, 'ext' . DIRECTORY_SEPARATOR) === 0) {
+            throw new RuntimeException('Invalid namespace path, root path with name "ext" is reserved');
+        }
+        return strtolower($path);
     }
 
     /**
