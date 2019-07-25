@@ -64,21 +64,28 @@ final class InitCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $namespace = $this->sanitizeNamespace($input->getArgument('namespace'));
-        $namespacePath = $this->checkNamespacePath($input->getArgument('namespace-path'));
-        if (empty($namespacePath)) {
-            $namespacePath = $this->checkNamespacePath($namespacePath);
-        }
-
+        $name = $input->getArgument('name') ?: $namespace;
+        $path = $input->getArgument('path')
+            ? $this->checkNamespacePath($input->getArgument('path'))
+            : $this->checkNamespacePath(strtolower(str_replace('\\', DIRECTORY_SEPARATOR, trim($namespace, '\\'))));
         // Tell the user the name could be reserved by another extension
         if (extension_loaded($namespace)) {
             $this->logger->error('This extension can have conflicts with an existing loaded extension');
         }
+        if ($input->getArgument('path')) {
+            $this->config->set('extensions', [
+                $name => [
+                    'namespace' => $namespace,
+                    'path' => $path,
+                ],
+            ]);
+        } else {
+            $this->config->set('namespace', $namespace);
+        }
+        $this->config->set('name', $name);
 
-        $this->config->set('namespace-paths', [$namespace => $namespacePath]);
-        $this->config->set('name', strtolower(str_replace('\\', '_', trim($namespace, '\\'))));
-
-        if (!is_dir($namespacePath)) {
-            mkdir($namespacePath, 0755, true);
+        if (!is_dir($path)) {
+            mkdir($path, 0755, true);
         }
 
         // Create 'kernel'
@@ -109,9 +116,14 @@ final class InitCommand extends Command
                     'ZendEngine3'
                 ),
                 new InputArgument(
-                    'namespace-path',
+                    'path',
                     InputArgument::OPTIONAL,
                     'The extension namespace path'
+                ),
+                new InputArgument(
+                    'name',
+                    InputArgument::OPTIONAL,
+                    'The extension name'
                 ),
             ]
         );
